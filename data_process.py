@@ -4,7 +4,7 @@ from csv import reader, writer
 import torch
 import nltk
 from nltk.corpus import stopwords
-from random import shuffle
+import random
 
 def main(args):
     q_context = {}
@@ -18,6 +18,9 @@ def main(args):
             score = float(row[6])
             context = row[8]
             choice = row[5]
+            
+            if choice == "N/A: One or both questions are not applicable to the product":
+                continue
             
             # add question -> context to q_context
             if question_a not in q_context:
@@ -37,6 +40,7 @@ def main(args):
             elif choice == "Both are at the same level of specificity":
                 score_a = 0.5
                 score_b = 0.5
+
             
             # assign question->score to q_score
             if question_a in q_score:
