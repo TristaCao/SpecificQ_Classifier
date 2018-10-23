@@ -307,7 +307,6 @@ def main(args):
       
     with open("labels_features.csv", mode = 'w') as file:
         w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        w.writerow(["label", "features"])
         for r in label_features:
             w.writerow(r)
             
