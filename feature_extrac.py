@@ -240,11 +240,7 @@ def main(args):
                     word_type.append(token)
     
     # import trained word embeddings
-<<<<<<< HEAD
     embedding_vectors = open("vectors.txt")
-=======
-    embedding_vectors = open("amazon_embeddings/vectors.txt")
->>>>>>> 15c9f74b4ffe1204611b6b9f380eb86594274ce3
     boe = {}
     for v in embedding_vectors:
         l = v.split()
