@@ -8,8 +8,7 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-F_DIM = 254
-NUM_TRAIN = 200
+NUM_TRAIN = 300
 NUM_DEV = 100
 NUM_TEST = 100
 
@@ -41,16 +40,19 @@ def train(hyper_param, model, criterion, optimizer, train_loader):
             x, y = Variable(x), Variable(y)
             y_hat = model(x)
             loss = criterion(y_hat, y)
-            print(epoch, i, loss.data)
+            #print(epoch, i, loss.data)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         
 def test(model,criterion, x, y):
+    losses = []
     for i in range(x.shape[0]):
         y_pred = model(Variable(torch.from_numpy(x[i])))
         loss = criterion(y_pred, Variable(torch.from_numpy(y[i])))
-        print(i, loss.data)
+        losses.append([loss.data.item()])
+        print(loss.data.item())
+    return losses
     
 
 
@@ -70,9 +72,9 @@ def main(args):
             
     
     hyper_param = {}
-    hyper_param["epochs"] = 10
-    hyper_param["lr"] = .0001
-    hyper_param["batch"] = 32
+    hyper_param["epochs"] = 1500
+    hyper_param["lr"] = .001
+    hyper_param["batch"] = 16
     
     dataset = FeatureData(train_x, train_y)
     train_loader = DataLoader(dataset=dataset,\
@@ -81,11 +83,43 @@ def main(args):
                               num_workers=2)
     
     model = LinearRegModel(x.shape[1], 1) 
+    #model = LinearRegModel(1,1)
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), hyper_param["lr"])
     
     train(hyper_param, model, criterion, optimizer, train_loader)
-    #test(model,criterion, dev_x, dev_y)
+    
+    word_param_weights = []
+    p = True
+    for param in model.parameters():
+        if p:
+            print(param.data[0,0:19])
+            print(param.data[0,19:])
+            for w in param.data[0][19:]:
+                word_param_weights.append(w.item())
+            p = False
+    result = test(model,criterion, dev_x, dev_y)
+    
+    word_weights = []
+    word_type = []
+    with open("word_feature_weights.csv") as file:
+        f = reader(file, delimiter = ',')
+        for row in f:
+            word_type = row
+            
+    for index in range(len(word_type)):
+        word_weights.append([word_type[index], word_param_weights[index]])
+    
+    with open('word_weights.csv', mode = 'w') as file:
+        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for row in word_weights:
+            w.writerow(row)
+    
+    with open('baseline.csv', mode = 'w') as file:
+        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        w.writerow(["result"])
+        for l in result:
+            w.writerow(l)
     
     
 

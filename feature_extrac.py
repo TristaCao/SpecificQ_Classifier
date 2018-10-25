@@ -15,7 +15,7 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-NUM_TRAIN = 50 
+NUM_TRAIN = 200 
 
 def sent_len(q_tokens):
     return len(q_tokens)
@@ -302,8 +302,11 @@ def main(args):
             feature.append(f17)
             feature.append(f18)
             feature += f19 # large dimension
-            
             label_features.append(feature)
+            
+    with open("word_feature_weights.csv", mode = 'w') as file:
+        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        w.writerow(word_type)
       
     with open("labels_features.csv", mode = 'w') as file:
         w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
