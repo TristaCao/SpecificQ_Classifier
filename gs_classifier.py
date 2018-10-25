@@ -83,43 +83,43 @@ def main(args):
                               num_workers=2)
     
     model = LinearRegModel(x.shape[1], 1) 
-    #model = LinearRegModel(1,1)
+    #model = LinearRegModel(1,1) -- for baseline
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), hyper_param["lr"])
     
     train(hyper_param, model, criterion, optimizer, train_loader)
     
-    word_param_weights = []
+#    word_param_weights = []
     p = True
     for param in model.parameters():
         if p:
             print(param.data[0,0:19])
             print(param.data[0,19:])
-            for w in param.data[0][19:]:
-                word_param_weights.append(w.item())
+#            for w in param.data[0][19:]:
+#                word_param_weights.append(w.item())
             p = False
     result = test(model,criterion, dev_x, dev_y)
     
-    word_weights = []
-    word_type = []
-    with open("word_feature_weights.csv") as file:
-        f = reader(file, delimiter = ',')
-        for row in f:
-            word_type = row
-            
-    for index in range(len(word_type)):
-        word_weights.append([word_type[index], word_param_weights[index]])
-    
-    with open('word_weights.csv', mode = 'w') as file:
-        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row in word_weights:
-            w.writerow(row)
-    
-    with open('baseline.csv', mode = 'w') as file:
-        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        w.writerow(["result"])
-        for l in result:
-            w.writerow(l)
+#    word_weights = []
+#    word_type = []
+#    with open("word_feature_weights.csv") as file:
+#        f = reader(file, delimiter = ',')
+#        for row in f:
+#            word_type = row
+#            
+#    for index in range(len(word_type)):
+#        word_weights.append([word_type[index], word_param_weights[index]])
+#    
+#    with open('word_weights.csv', mode = 'w') as file:
+#        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+#        for row in word_weights:
+#            w.writerow(row)
+#    
+#    with open('baseline.csv', mode = 'w') as file:
+#        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+#        w.writerow(["result"])
+#        for l in result:
+#            w.writerow(l)
     
     
 
