@@ -36,7 +36,7 @@ def main(args):
                 score_b = 1-score
             elif choice == "Question B is more specific":
                 score_b = score
-                score_a = 1 - score
+                score_a = 1- score
             elif choice == "Both are at the same level of specificity":
                 score_a = 0.5
                 score_b = 0.5

@@ -15,7 +15,7 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-NUM_TRAIN = 200 
+NUM_TRAIN = 1500 
 
 def sent_len(q_tokens):
     return len(q_tokens)
@@ -29,7 +29,8 @@ def ne_cd(q_tokens):
     pnouns = counts['NNS'] + counts['NNPS']
     nnums = counts['CD']
     npnames = counts['NNP'] + counts['NNPS']
-    return nouns, pnouns, nnums, npnames
+    adj = counts['JJ'] + counts['JJR'] + counts['JJS']
+    return nouns, pnouns, nnums, npnames, adj
 
 # given a single training question 
 # return a vector with the same size as word_vector
@@ -54,6 +55,8 @@ def idf(q_tokens, idf_dic):
         average += idf
         maximum = max(maximum, idf)
         minimum = min(minimum, idf)
+    if len(q_tokens) == 0:
+        return 0,0,0
         
     return average/len(q_tokens), maximum, minimum
 
@@ -148,7 +151,8 @@ def num_hypernyms(q_tokens):
             average += num_hyper
             minimum = min(minimum, num_hyper)
             maximum = max(maximum, num_hyper)
-    assert count!=0
+    if count == 0:
+        return 0,0,0
     return average/count, maximum, minimum
 
 # return how many words in the 
@@ -209,6 +213,9 @@ def similarity(q_tokens, c_tokens, boe):
         c_count += 1
         c_embedding += boe[ct]
         
+    if q_count == 0 or c_count == 0:
+        return 0
+    
     q_embedding = q_embedding/q_count
     c_embedding = c_embedding/c_count
     
@@ -229,7 +236,7 @@ def main(args):
             if count > NUM_TRAIN:
                 break
             count += 1
-            question = row[0]
+            question = row[1]
             no_punc = question.translate(str.maketrans('','',string.punctuation))
             qs.append(no_punc)
             tokens = word_tokenize(no_punc)
@@ -265,23 +272,23 @@ def main(args):
         next(f)
         for row in f:
             feature = []
-            q = row[0]
+            q = row[1]
             q_no_punc = q.translate(str.maketrans('','',string.punctuation))
             q_tokens = word_tokenize(q_no_punc)
-            c = row[1]
+            c = row[0]
             c_no_punc = c.translate(str.maketrans('','',string.punctuation))
             c_tokens = word_tokenize(c_no_punc)
             f0 = sent_len(q_tokens)
-            f1, f2, f3, f4 = ne_cd(q_tokens)
-            f5, f6, f7 = idf(q_tokens,idf_dic)
-            f8, f9, f10, f11, f12, f13 = polarity(q_tokens, liwc_dict, liwc_prefix)
-            f14, f15, f16 = num_hypernyms(q_tokens)
-            f17 = hypernym_match(q_tokens,c_tokens)
-            f18 = similarity(q_tokens,c_tokens, boe)
-            f19 = word_count(q_tokens, word_type).tolist()
+            f1, f2, f3, f4, f5 = ne_cd(q_tokens)
+            f6, f7, f8 = idf(q_tokens,idf_dic)
+            f9, f10, f11, f12, f13, f14 = polarity(q_tokens, liwc_dict, liwc_prefix)
+            f15, f16, f17 = num_hypernyms(q_tokens)
+            f18 = hypernym_match(q_tokens,c_tokens)
+            f19 = similarity(q_tokens,c_tokens, boe)
+            f20 = word_count(q_tokens, word_type).tolist()
 
             
-            feature.append(row[2])
+            feature.append(row[3])
             feature.append(f0)
             feature.append(f1)
             feature.append(f2)
@@ -301,7 +308,8 @@ def main(args):
             feature.append(f16)
             feature.append(f17)
             feature.append(f18)
-            feature += f19 # large dimension
+            feature.append(f19)
+            feature += f20 # large dimension
             label_features.append(feature)
             
     with open("word_feature_weights.csv", mode = 'w') as file:

@@ -8,9 +8,9 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-NUM_TRAIN = 300
-NUM_DEV = 100
-NUM_TEST = 100
+NUM_TRAIN = 1500
+NUM_DEV = 200
+NUM_TEST = 200
 
 class FeatureData(Dataset):
     def __init__(self, x, y):
@@ -25,35 +25,66 @@ class FeatureData(Dataset):
         return self.len
     
         
-class LinearRegModel(nn.Module):
-    def __init__(self, num_features, num_classes):
-        super(LinearRegModel,self).__init__()
-        self.linear = nn.Linear(num_features, num_classes)
+class LogRegModel(nn.Module):
+    def __init__(self, num_features):
+        super(LogRegModel,self).__init__()
+        self.linear = nn.Linear(num_features, 1)
     
     def forward(self, x):
-        return self.linear(x)
+        return F.sigmoid(self.linear(x))
     
-def train(hyper_param, model, criterion, optimizer, train_loader):
-    for epoch in range(hyper_param["epochs"]):
-        for i, data in enumerate(train_loader, 0):
-            x, y = data
-            x, y = Variable(x), Variable(y)
-            y_hat = model(x)
-            loss = criterion(y_hat, y)
-            #print(epoch, i, loss.data)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+def train(model, criterion, optimizer, train_loader):
+    acc = 0
+    losses = 0
+    count = 0
+    for i, data in enumerate(train_loader, 0):
+        x, y = data
+        x, y = Variable(x), Variable(y)
+        y_hat = model(x)
+        loss = criterion(y_hat, y)
+        
+        count += 1
+        losses += loss.data.item()
+        
+        inner_count = 0
+        inner_acc = 0
+        for index in range(y.shape[0]):
+            inner_count += 1
+            if y_hat[index][0].item() >= 0.5 and y[index][0].item() == 1:
+                inner_acc += 1
+            elif y_hat[index][0].item() < 0.5 and y[index][0].item() == 0:
+                inner_acc += 1
+        acc += inner_acc/ inner_count
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+    return acc/count, losses/count
+    
         
 def test(model,criterion, x, y):
-    losses = []
+    acc = 0
+    count = 0
+    l = 0
     for i in range(x.shape[0]):
+        count += 1
         y_pred = model(Variable(torch.from_numpy(x[i])))
-        loss = criterion(y_pred, Variable(torch.from_numpy(y[i])))
-        losses.append([loss.data.item()])
-        print(loss.data.item())
-    return losses
-    
+        loss = criterion(y_pred,Variable(torch.from_numpy(y[i])))
+        y_pred = y_pred.item()
+        
+        l += loss.data.item()
+        if y_pred >= 0.5 and y[i][0] == 1:
+            acc += 1
+#            print("Number " + str(i) + " has y_pred: "+str(y_pred)+\
+#                     " but true y should be: " + str(y[i][0]))
+        elif y_pred < 0.5 and y[i][0] == 0:
+            acc += 1
+#            print("Number " + str(i) + " has y_pred: "+str(y_pred)+\
+#                     " but true y should be: " + str(y[i][0]))
+        
+        
+    return acc/count, l/count
 
 
 def main(args):
@@ -72,7 +103,7 @@ def main(args):
             
     
     hyper_param = {}
-    hyper_param["epochs"] = 1500
+    hyper_param["epochs"] = 10
     hyper_param["lr"] = .001
     hyper_param["batch"] = 16
     
@@ -82,23 +113,31 @@ def main(args):
                               shuffle=True,\
                               num_workers=2)
     
-    model = LinearRegModel(x.shape[1], 1) 
-    #model = LinearRegModel(1,1) -- for baseline
-    criterion = nn.MSELoss()
+    model = LogRegModel(x.shape[1]) 
+    #model = LogRegModel(20) #-- for baseline
+    criterion = nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), hyper_param["lr"])
     
-    train(hyper_param, model, criterion, optimizer, train_loader)
+    
+    for epoch in range(hyper_param["epochs"]):
+        print("Epoch: " + str(epoch) + "---------------------")
+        train_acc, train_loss = train( model, criterion, optimizer, train_loader)
+        print("Training Accuracy: " + str(train_acc))
+        print("Training Loss: " + str(train_loss))
+        test_acc, test_loss= test(model,criterion, dev_x, dev_y)
+        print("Testing Accuracy: " + str(test_acc)) 
+        print("Testing Loss: " + str(test_loss))
     
 #    word_param_weights = []
     p = True
     for param in model.parameters():
         if p:
-            print(param.data[0,0:19])
-            print(param.data[0,19:])
+#            print(param.data[0,0:19])
+#            print(param.data[0,19:])
 #            for w in param.data[0][19:]:
 #                word_param_weights.append(w.item())
             p = False
-    result = test(model,criterion, dev_x, dev_y)
+    
     
 #    word_weights = []
 #    word_type = []
