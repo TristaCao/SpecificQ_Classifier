@@ -311,9 +311,9 @@ def main(args):
             feature.append(f17)
             feature.append(f18)
             feature.append(f19)
-            feature += f20.tolist() # large dimension
-            feature += f21.tolist()
-            feature += f22
+            feature += f20.tolist() # embedding for q
+            feature += f21.tolist() # embedding for c
+            feature += f22 #bag of words
             label_features.append(feature)
             
     with open("word_feature_weights.csv", mode = 'w') as file:
