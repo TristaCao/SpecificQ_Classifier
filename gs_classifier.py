@@ -11,6 +11,7 @@ import numpy as np
 NUM_TRAIN = 1500
 NUM_DEV = 200
 NUM_TEST = 200
+FINAL = False
 
 class FeatureData(Dataset):
     def __init__(self, x, y):
@@ -80,10 +81,45 @@ def test(model,criterion, x, y):
 #                     " but true y should be: " + str(y[i][0]))
         elif y_pred < 0.5 and y[i][0] == 0:
             acc += 1
+        
+        
+    return acc/count, l/count
+
+def final_test(model,criterion, x, y):
+    acc = 0
+    count = 0
+    l = 0
+    tt=0
+    tf=0
+    ft=0
+    ff=0
+    for i in range(x.shape[0]):
+        count += 1
+        y_pred = model(Variable(torch.from_numpy(x[i])))
+        loss = criterion(y_pred,Variable(torch.from_numpy(y[i])))
+        y_pred = y_pred.item()
+        
+        l += loss.data.item()
+        if y_pred >= 0.5 and y[i][0] == 1:
+            acc += 1
+            tt+=1
 #            print("Number " + str(i) + " has y_pred: "+str(y_pred)+\
 #                     " but true y should be: " + str(y[i][0]))
+        elif y_pred < 0.5 and y[i][0] == 0:
+            ff+=1
+            acc += 1
+        else:
+            if y_pred >= 0.5 and y[i][0] == 0:
+                tf +=1
+            else:
+                ft+=1
+#                print("Number " + str(i) + " has y_pred: "+str(y_pred)+\
+                     " but true y should be: " + str(y[i][0]))
         
-        
+#    print(tt)
+#    print(tf)
+#    print(ft)
+#    print(ff)
     return acc/count, l/count
 
 
@@ -100,10 +136,32 @@ def main(args):
     dev_y = y[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
     test_x = x[NUM_TRAIN+NUM_DEV:]
     test_y = y[NUM_TRAIN+NUM_DEV:]
+    
+    # Check the balance of train and dev data
+#    train_specific = 0
+#    train_general = 0
+#    for y in train_y:
+#        if y[0] == 0:
+#            train_general += 1
+#        else:
+#            train_specific += 1
+#    dev_specific = 0
+#    dev_general = 0
+#    for y in dev_y:
+#        if y[0] == 0:
+#            dev_general += 1
+#        else:
+#            dev_specific += 1
+#            
+#    print(train_specific) --639
+#    print(train_general) --861
+#    print(dev_specific) --83
+#    print(dev_general) --117
+            
             
     
     hyper_param = {}
-    hyper_param["epochs"] = 10
+    hyper_param["epochs"] = 8
     hyper_param["lr"] = .001
     hyper_param["batch"] = 16
     
@@ -114,29 +172,35 @@ def main(args):
                               num_workers=2)
     
     model = LogRegModel(x.shape[1]) 
-    #model = LogRegModel(20) #-- for baseline
+    #model = LogRegModel(1) #-- for baseline
     criterion = nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), hyper_param["lr"])
+    optimizer = torch.optim.Adam(model.parameters(), hyper_param["lr"])
     
     
     for epoch in range(hyper_param["epochs"]):
-        print("Epoch: " + str(epoch) + "---------------------")
+#        print("Epoch: " + str(epoch) + "---------------------")
         train_acc, train_loss = train( model, criterion, optimizer, train_loader)
-        print("Training Accuracy: " + str(train_acc))
-        print("Training Loss: " + str(train_loss))
-        test_acc, test_loss= test(model,criterion, dev_x, dev_y)
-        print("Testing Accuracy: " + str(test_acc)) 
-        print("Testing Loss: " + str(test_loss))
+#        print("Training Accuracy: " + str(train_acc))
+#        print("Training Loss: " + str(train_loss))
+#        test_acc, test_loss= test(model,criterion, dev_x, dev_y)
+#        print("Testing Accuracy: " + str(test_acc)) 
+#        print("Testing Loss: " + str(test_loss))
+    
+    # print out result for analysis
+#    test_acc, test_loss= final_test(model,criterion, dev_x, dev_y)
+#    print("Testing Accuracy: " + str(test_acc)) 
+#    print("Testing Loss: " + str(test_loss))
+#    final_test(model, criterion, train_x, train_y)
     
 #    word_param_weights = []
-    p = True
-    for param in model.parameters():
-        if p:
-#            print(param.data[0,0:19])
+#    p = True
+#    for param in model.parameters():
+#        if p:
+#            print(param.data[0,0:19]) #print out parameters
 #            print(param.data[0,19:])
 #            for w in param.data[0][19:]:
 #                word_param_weights.append(w.item())
-            p = False
+#            p = False
     
     
 #    word_weights = []

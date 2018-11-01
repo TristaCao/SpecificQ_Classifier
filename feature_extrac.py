@@ -214,13 +214,14 @@ def similarity(q_tokens, c_tokens, boe):
         c_embedding += boe[ct]
         
     if q_count == 0 or c_count == 0:
-        return 0
+        return 0, q_embedding, c_embedding
     
     q_embedding = q_embedding/q_count
     c_embedding = c_embedding/c_count
     
-    return cosine_similarity(q_embedding, c_embedding)[0][0]
+    return cosine_similarity(q_embedding, c_embedding)[0][0], q_embedding, c_embedding
  
+
     
 
 def main(args):
@@ -284,8 +285,9 @@ def main(args):
             f9, f10, f11, f12, f13, f14 = polarity(q_tokens, liwc_dict, liwc_prefix)
             f15, f16, f17 = num_hypernyms(q_tokens)
             f18 = hypernym_match(q_tokens,c_tokens)
-            f19 = similarity(q_tokens,c_tokens, boe)
-            f20 = word_count(q_tokens, word_type).tolist()
+            f19, f20, f21 = similarity(q_tokens,c_tokens, boe)
+            f22 = word_count(q_tokens, word_type).tolist()
+            
 
             
             feature.append(row[3])
@@ -309,7 +311,9 @@ def main(args):
             feature.append(f17)
             feature.append(f18)
             feature.append(f19)
-            feature += f20 # large dimension
+            feature += f20.tolist() # large dimension
+            feature += f21.tolist()
+            feature += f22
             label_features.append(feature)
             
     with open("word_feature_weights.csv", mode = 'w') as file:
