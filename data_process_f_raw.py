@@ -108,15 +108,33 @@ def main(args):
             trust = float(row[8])
             choice = row[14]
             context = row[16]
-            question_a = row[18]
-            question_b = row[19]
+            question_a = row[19]
+            question_b = row[20]
             
             if golden=="ture" or tainted=="true":
                 continue
             
             extract_score(trust, choice, context, question_a, question_b, \
                           context_qs, q_score_count)
-                
+    with open("f1317791.csv") as file:
+        f = reader(file, delimiter = ',')
+        next(f)
+        for row in f:
+            golden = row[2]
+            tainted = row[6]
+            trust = float(row[8])
+            choice = row[14]
+            context = row[16]
+            question_a = row[19]
+            question_b = row[20]
+            
+            if golden=="ture" or tainted=="true":
+                continue
+            
+            extract_score(trust, choice, context, question_a, question_b, \
+                          context_qs, q_score_count)
+            
+   
     for q in q_score_count:
         scr, cot = q_score_count[q]
         q_score[q] = scr/cot
@@ -134,8 +152,49 @@ def main(args):
                     s = 1
                 row = [c, q, q_score[q], s]
                 w.writerow(row)
-    
    
+    
+#    context_qs = {}
+#    q_score_count = {}
+#    q_score = {}
+#   
+#    with open("f1312216.csv") as file:
+#        f = reader(file, delimiter = ',')
+#        next(f)
+#        for row in f:
+#            golden = row[2]
+#            tainted = row[6]
+#            trust = float(row[8])
+#            choice = row[14]
+#            context = row[16]
+#            question_a = row[18]
+#            question_b = row[19]
+#            
+#            if golden=="ture" or tainted=="true":
+#                continue
+#            
+#            extract_score(trust, choice, context, question_a, question_b, \
+#                          context_qs, q_score_count)
+#                
+#    for q in q_score_count:
+#        scr, cot = q_score_count[q]
+#        q_score[q] = scr/cot
+#                
+#    
+#    
+#    with open("processed_data_test.csv", mode = 'w') as file:
+#        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+#        w.writerow(["context", "question", "score", "specific_or_not"])
+#        for c in context_qs:
+#            qs = context_qs[c]
+#            for q in qs:
+#                s = 0
+#                if q_score[q] >= 0.5:
+#                    s = 1
+#                row = [c, q, q_score[q], s]
+#                w.writerow(row)
+#    
+#   
     
             
            

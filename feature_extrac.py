@@ -15,7 +15,7 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-NUM_TRAIN = 1500 
+NUM_TRAIN = 2500 
 
 def sent_len(q_tokens):
     return len(q_tokens)
@@ -235,10 +235,7 @@ def main(args):
         f = reader(file, delimiter = ',')
         next(f)
         for row in f:
-            if count >= 400 and count <500:
-                count += 1
-                continue
-            if count >500:
+            if count > NUM_TRAIN:
                 break
             count += 1
             question = row[1]
