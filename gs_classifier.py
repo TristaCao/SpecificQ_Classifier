@@ -114,7 +114,7 @@ def final_test(model,criterion, x, y):
             else:
                 ft+=1
 #                print("Number " + str(i) + " has y_pred: "+str(y_pred)+\
-                     " but true y should be: " + str(y[i][0]))
+#                     " but true y should be: " + str(y[i][0]))
         
 #    print(tt)
 #    print(tf)
@@ -130,12 +130,18 @@ def main(args):
     xy = np.loadtxt('labels_features.csv', delimiter=',', dtype = np.float32)
     x = xy[:,1:]
     y = xy[:,[0]]
-    train_x = x[0:NUM_TRAIN]
-    train_y = y[0:NUM_TRAIN]
-    dev_x = x[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
-    dev_y = y[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
-    test_x = x[NUM_TRAIN+NUM_DEV:]
-    test_y = y[NUM_TRAIN+NUM_DEV:]
+#    train_x = x[0:NUM_TRAIN]
+#    train_y = y[0:NUM_TRAIN]
+#    dev_x = x[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
+#    dev_y = y[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
+#    test_x = x[NUM_TRAIN+NUM_DEV:]
+#    test_y = y[NUM_TRAIN+NUM_DEV:]
+    
+
+    train_x = np.concatenate((x[0:400], x[500:500]), axis=0)
+    train_y = np.concatenate((y[0:400], y[500:500]), axis=0)
+    dev_x = x[400:500]
+    dev_y = y[400:500]
     
     # Check the balance of train and dev data
 #    train_specific = 0
@@ -161,7 +167,7 @@ def main(args):
             
     
     hyper_param = {}
-    hyper_param["epochs"] = 8
+    hyper_param["epochs"] = 100
     hyper_param["lr"] = .001
     hyper_param["batch"] = 16
     
@@ -178,13 +184,13 @@ def main(args):
     
     
     for epoch in range(hyper_param["epochs"]):
-#        print("Epoch: " + str(epoch) + "---------------------")
+        print("Epoch: " + str(epoch) + "---------------------")
         train_acc, train_loss = train( model, criterion, optimizer, train_loader)
-#        print("Training Accuracy: " + str(train_acc))
-#        print("Training Loss: " + str(train_loss))
-#        test_acc, test_loss= test(model,criterion, dev_x, dev_y)
-#        print("Testing Accuracy: " + str(test_acc)) 
-#        print("Testing Loss: " + str(test_loss))
+        print("Training Accuracy: " + str(train_acc))
+        print("Training Loss: " + str(train_loss))
+        test_acc, test_loss= test(model,criterion, dev_x, dev_y)
+        print("Testing Accuracy: " + str(test_acc)) 
+        print("Testing Loss: " + str(test_loss))
     
     # print out result for analysis
 #    test_acc, test_loss= final_test(model,criterion, dev_x, dev_y)

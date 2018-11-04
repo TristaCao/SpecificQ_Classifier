@@ -219,9 +219,10 @@ def similarity(q_tokens, c_tokens, boe):
     q_embedding = q_embedding/q_count
     c_embedding = c_embedding/c_count
     
-    return cosine_similarity(q_embedding, c_embedding)[0][0], q_embedding, c_embedding
+#    print(cosine_similarity(q_embedding, c_embedding))
+    return cosine_similarity(q_embedding.reshape(1,-1),c_embedding.reshape(1,-1))[0][0], q_embedding, c_embedding
  
-
+#    return cosine_similarity([q_embedding],[c_embedding])[0][0], q_embedding, c_embedding
     
 
 def main(args):
@@ -234,7 +235,10 @@ def main(args):
         f = reader(file, delimiter = ',')
         next(f)
         for row in f:
-            if count > NUM_TRAIN:
+            if count >= 400 and count <500:
+                count += 1
+                continue
+            if count >500:
                 break
             count += 1
             question = row[1]
