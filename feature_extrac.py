@@ -2,6 +2,7 @@ import sys
 import io
 import re
 import math
+import csv
 from csv import reader, writer
 from random import shuffle
 import nltk
@@ -15,12 +16,12 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-NUM_TRAIN = 2500 
+NUM_TRAIN = 3000
 
 def sent_len(q_tokens):
     return len(q_tokens)
 
-# return num_of_nouns, num_of_plural_nouns, num_of_numbers, 
+# return num_of_nouns, num_of_plural_nouns, num_of_numbers,
 # num_of_propernames
 def ne_cd(q_tokens):
     tags = nltk.pos_tag(q_tokens)
@@ -32,7 +33,7 @@ def ne_cd(q_tokens):
     adj = counts['JJ'] + counts['JJR'] + counts['JJS']
     return nouns, pnouns, nnums, npnames, adj
 
-# given a single training question 
+# given a single training question
 # return a vector with the same size as word_vector
 # each entry represents the number of appearance of word type in this single q
 def word_count(q_tokens, word_type):
@@ -43,7 +44,7 @@ def word_count(q_tokens, word_type):
             feature_vector[index] += 1
     return feature_vector
 
-# return the average, max, min of idfs 
+# return the average, max, min of idfs
 def idf(q_tokens, idf_dic):
     average = 0.0
     maximum = 0
@@ -57,11 +58,11 @@ def idf(q_tokens, idf_dic):
         minimum = min(minimum, idf)
     if len(q_tokens) == 0:
         return 0,0,0
-        
+
     return average/len(q_tokens), maximum, minimum
 
 
-    
+
 # read in LIWC lexicon -- from Hal
 def read_liwc():
     liwc_dict = {}
@@ -100,10 +101,10 @@ def match_liwc(w, liwc_dict, liwc_prefix):
         for prefix, cats in liwc_prefix[w[0]]:
             if w.startswith(prefix):
                 return cats
-    return set()  
-    
+    return set()
+
 def polarity(q_tokens, liwc_dict, liwc_prefix):
-    # doing for only insight, Discrepancy, Certainty	
+    # doing for only insight, Discrepancy, Certainty
     insight_ct = 0
     discrep_ct = 0
     certain_ct = 0
@@ -126,7 +127,7 @@ def polarity(q_tokens, liwc_dict, liwc_prefix):
             if 'differ' in cat:
                 differ_ct += 1
     return insight_ct, discrep_ct, certain_ct, cause_ct, tentat_ct, differ_ct
-    
+
 def token_hypernym(token):
     syn = wn.synsets(token)
     hypernyms = []
@@ -155,7 +156,7 @@ def num_hypernyms(q_tokens):
         return 0,0,0
     return average/count, maximum, minimum
 
-# return how many words in the 
+# return how many words in the
 def hypernym_match(q_tokens, c_tokens):
     count = 0
     # construct a list of nouns and verbs in the context
@@ -166,15 +167,15 @@ def hypernym_match(q_tokens, c_tokens):
             if token not in cont_words:
                 cont_words.append(token)
     # construct a list of nouns and verbs in the question
-    q_words_hyps = []         
+    q_words_hyps = []
     tags = nltk.pos_tag(q_tokens)
     for token, pos in tags:
         if pos[0] == 'N' or pos[0] == 'V':
             if token not in q_words_hyps:
                 num_hyp, hypernyms  = token_hypernym(token)
                 q_words_hyps.append(hypernyms)
-    
-    # for each word type in question, get its list of hypernyms 
+
+    # for each word type in question, get its list of hypernyms
     # (only consider the most popular hypernym)
     for hyps in q_words_hyps:
         break_loop = False
@@ -204,33 +205,36 @@ def similarity(q_tokens, c_tokens, boe):
             continue
         q_count += 1
         q_embedding += boe[qt]
-    
+
     for ct in c_tokens:
-        
+
         ct = ct.lower()
         if ct not in boe:
             continue
         c_count += 1
         c_embedding += boe[ct]
-        
+
     if q_count == 0 or c_count == 0:
         return 0, q_embedding, c_embedding
-    
+
     q_embedding = q_embedding/q_count
     c_embedding = c_embedding/c_count
-    
+
 #    print(cosine_similarity(q_embedding, c_embedding))
     return cosine_similarity(q_embedding.reshape(1,-1),c_embedding.reshape(1,-1))[0][0], q_embedding, c_embedding
- 
+
 #    return cosine_similarity([q_embedding],[c_embedding])[0][0], q_embedding, c_embedding
-    
+
 
 def main(args):
-    
+
     # readin questions
     count = 0
     word_type = [] # a list of word types appeared in all training questions
-    qs = []  # a list of questions  
+    qs = []  # a list of questions
+    idf_corpus = [] # a list of docs -- product description + questions
+    c_qs = {} # dictionary of description --> questions
+
     with open("processed_data.csv") as file:
         f = reader(file, delimiter = ',')
         next(f)
@@ -239,15 +243,28 @@ def main(args):
                 break
             count += 1
             question = row[1]
-            no_punc = question.translate(str.maketrans('','',string.punctuation))
-            qs.append(no_punc)
-            tokens = word_tokenize(no_punc)
-#           # get rid off the stop words
-#           filtered = [w for w in tokens if not w in stopwords.words('english')]
-            for token in tokens:
+            q_no_punc = question.translate(str.maketrans('','',string.punctuation))
+            q_tokens = word_tokenize(q_no_punc)
+            qs.append(q_no_punc)
+            c = row[0]
+            c_no_punc = c.translate(str.maketrans('','',string.punctuation))
+            c_tokens = word_tokenize(c_no_punc)
+            if c_no_punc not in c_qs:
+                c_qs[c_no_punc] = [q_no_punc]
+            else:
+                c_qs[c_no_punc].append(q_no_punc)
+            for token in q_tokens:
                 if token not in word_type:
                     word_type.append(token)
-    
+
+    for content in c_qs:
+        doc = content
+        for q in c_qs[content]:
+            doc += " "+q
+        idf_corpus.append(doc)
+    #print(len(idf_corpus))
+    #print(idf_corpus[])
+
     # import trained word embeddings
     embedding_vectors = open("vectors.txt")
     boe = {}
@@ -256,18 +273,18 @@ def main(args):
         lst = l[1:]
         boe[l[0]] = [float(i) for i in lst]
 
-        
-    
+
+
     # LIWC
     liwc_dict, liwc_prefix = read_liwc()
-    
+
     # pretrain idf based on all training questions (corpus)
     vectorizer = TfidfVectorizer(token_pattern='(?u)\\b\\w+\\b')
-    X = vectorizer.fit_transform(qs)
+    X = vectorizer.fit_transform(idf_corpus)
     idf_vec = vectorizer.idf_
     idf_dic = dict(zip(vectorizer.get_feature_names(), idf_vec))
-    
-    
+
+
     label_features = []
     with open("processed_data.csv") as file:
         f = reader(file, delimiter = ',')
@@ -288,9 +305,9 @@ def main(args):
             f18 = hypernym_match(q_tokens,c_tokens)
             f19, f20, f21 = similarity(q_tokens,c_tokens, boe)
             f22 = word_count(q_tokens, word_type).tolist()
-            
 
-            
+
+
             feature.append(row[3])
             feature.append(f0)
             feature.append(f1)
@@ -316,20 +333,20 @@ def main(args):
             feature += f21.tolist() # embedding for c
             feature += f22 #bag of words
             label_features.append(feature)
-            
+
     with open("word_feature_weights.csv", mode = 'w') as file:
         w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         w.writerow(word_type)
-      
+
     with open("labels_features.csv", mode = 'w') as file:
         w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         for r in label_features:
             w.writerow(r)
-            
 
-            
 
-       
+
+
+
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
