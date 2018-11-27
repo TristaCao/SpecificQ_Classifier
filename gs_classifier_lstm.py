@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 import sys
 import io
@@ -66,26 +67,39 @@ def batchify(batch):
 
 class LSTMClassifier(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, num_classes):
-        super(LSTMTagger, self).__init__()
+    def __init__(self, embedding_dim, hidden_dim, num_classes, boe):
+        super(LSTMClassifier, self).__init__()
         self.hidden_dim = hidden_dim
         
         self.lstm = nn.LSTM(embedding_dim, hidden_dim)
+        self.embedding = boe
 
         self.hidden2tag = nn.Linear(hidden_dim, num_classes)
+        self.linear = nn.Linear(num_classes,1)
         self.hidden = self.init_hidden()
 
     def init_hidden(self):
-        return (torch.zeros(1, 1, self.hidden_dim),
-                torch.zeros(1, 1, self.hidden_dim))
-
-    def forward(self, sentence, sent_len):
+        return (torch.zeros(1, 1, self.hidden_dim),torch.zeros(1, 1, self.hidden_dim))
+    
+    def sent_embed(self, sent):
+        embed = []
+        for token in sent:
+            if token not in self.embedding:
+                print("here")
+                continue
+            embed.append(self.embedding[token])
+        print("----------------------")
+        print(torch.tensor(embed).size())
+        return torch.tensor(embed)
+        
+    def forward(self, sentence):
+        embed = Variable(self.sent_embed(sentence))
+        print(len(sentence))
         print(sentence)
-        print(sentence.size())
         lstm_out, self.hidden = self.lstm(
-            sentence.view(len(sentence), 1, -1), self.hidden)
-        tag_space = self.hidden2tag(lstm_out.view(len(sentence), -1))
-        tag_scores = F.log_softmax(tag_space, dim=1)
+            embed.view(embed.size(0), 1, -1), self.hidden)
+        tag_space = self.hidden2tag(lstm_out[-1].view(-1))
+        tag_scores = F.sigmoid(self.linear(tag_space))
         return tag_scores
 
 def main(args):
@@ -105,6 +119,7 @@ def main(args):
         boe[l[0]] = [float(i) for i in lst]
         hyper_param["embedding_dim"] = len(boe[l[0]])    
     
+    
     # read in data and transfer to embeddings
     data = []
     with open("processed_data.csv") as file:
@@ -112,54 +127,51 @@ def main(args):
         next(f)
         for row in f:
             q = row[1]
-            q_no_punc = q.translate(str.maketrans('','',string.punctuation))
-            q_tokens = word_tokenize(q_no_punc)
-            q_em = []
-            for token in q_tokens:
-                if token not in boe:
-                    continue
-                q_em.append(boe[token])
-            data.append((q_em, row[3]))
+            q_no_punc = q.translate(str.maketrans('','',string.punctuation)).lower()
+            q_tokens = word_tokenize(q_no_punc) 
+            if len(q_tokens) == 0:
+                continue
+            data.append((q_tokens, row[3]))
             
     
     train_data = data[:NUM_TRAIN]
-    print(train_data[0])
-    train_dataset = Question_Dataset(train_data)
-    train_loader = torch.utils.data.DataLoader(train_dataset, \
-                                             batch_size=hyper_param["batch"],\
-                                             shuffle=True, num_workers=0,\
-                                             collate_fn=batchify)
-    dev_data = data[NUM_TRAIN: NUM_TRAIN+NUM_DEV]
-    dev_dataset = Question_Dataset(dev_data)
-    dev_loader = torch.utils.data.DataLoader(dev_dataset, \
-                                             batch_size=hyper_param["batch"],\
-                                             shuffle=True, num_workers=0,\
-                                             collate_fn=batchify)
-    test_data = data[NUM_TRAIN+NUM_DEV:]
-    test_dataset = Question_Dataset(test_data)
-    test_loader = torch.utils.data.DataLoader(test_dataset, \
-                                             batch_size=hyper_param["batch"],\
-                                             shuffle=True, num_workers=0,\
-                                             collate_fn=batchify)
+#    print(train_data[0])
+#    train_dataset = Question_Dataset(train_data)
+#    train_loader = torch.utils.data.DataLoader(train_dataset, \
+#                                             batch_size=hyper_param["batch"],\
+#                                             shuffle=True, num_workers=0,\
+#                                             collate_fn=batchify)
+#    dev_data = data[NUM_TRAIN: NUM_TRAIN+NUM_DEV]
+#    dev_dataset = Question_Dataset(dev_data)
+#    dev_loader = torch.utils.data.DataLoader(dev_dataset, \
+#                                             batch_size=hyper_param["batch"],\
+#                                             shuffle=True, num_workers=0,\
+#                                             collate_fn=batchify)
+#    test_data = data[NUM_TRAIN+NUM_DEV:]
+#    test_dataset = Question_Dataset(test_data)
+#    test_loader = torch.utils.data.DataLoader(test_dataset, \
+#                                             batch_size=hyper_param["batch"],\
+#                                             shuffle=True, num_workers=0,\
+#                                             collate_fn=batchify)
         
     model = LSTMClassifier(hyper_param["embedding_dim"],\
                            hyper_param["hidden_dim"], \
-                           hyper_param["num_classes"])
-    loss_function = nn.NLLLoss()
-    optimizer = optim.SGD(model.parameters(), lr=hyper_param["lr"])
+                           hyper_param["num_classes"], boe)
+    loss_function = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), hyper_param["lr"])
     
     for epoch in range(hyper_param["epochs"]): 
-        for idx, batch in enumerate(train_loader):
+        for sentence, label in train_data:
+            label = Variable(torch.FloatTensor([int(label)]))
             model.zero_grad()
     
             model.hidden = model.init_hidden()
     
-            sentence_in = prepare_sequence(sentence, word_to_ix)
-            targets = prepare_sequence(tags, tag_to_ix)
+#            sentence_in = prepare_sequence(sentence, word_to_ix)
+#            targets = prepare_sequence(tags, tag_to_ix)
+            tag_scores = model(sentence)
     
-            tag_scores = model(sentence_in)
-    
-            loss = loss_function(tag_scores, targets)
+            loss = loss_function(tag_scores, label)
             loss.backward()
             optimizer.step()
         
