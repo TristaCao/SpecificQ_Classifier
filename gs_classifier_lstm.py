@@ -22,85 +22,84 @@ import collections
 NUM_TRAIN = 3000
 NUM_DEV = 315
 NUM_TEST = 315
+PAD = "<PAD>"
 
 torch.manual_seed(1)
 
-class Question_Dataset(Dataset):
-    """
-    Pytorch data class for question classfication data
-    """
+class FeatureData(Dataset):
+    def __init__(self, x, y, length):
+        self.len = x.size(0)
+        self.x_data = x
+        self.length = length
+        self.y_data = y
 
-    def __init__(self, question_label):
-        self.questions = question_label[0]
-        self.labels = question_label[1]
-    
     def __getitem__(self, index):
-        return (self.questions[index], self.labels[index])
+        return self.x_data[index], self.y_data[index], self.length[index]
     
     def __len__(self):
-        return len(self.questions)
+        return self.len
 
+# take in a list of data and pad them
+# return the list of padded data, labels, and a list of len
+def pad(data):
+    lengths = [len(sentence) for sentence, label in data]
+    longest = max(lengths)
+    paddeds = []
+    labels = []
+    for i, y_len in enumerate(lengths):
+        sequence, label = data[i]
+        labels.append(int(label))
+        padded = [PAD]*longest
+        padded[0:y_len] = sequence[:y_len]
+        paddeds.append(padded)
+    
+    return paddeds, labels, lengths
 
-def batchify(batch):
-    """
-    Gather a batch of individual examples into one batch, 
-    which includes the question text, question length and labels 
-
-    Keyword arguments:
-    batch: list of outputs from vectorize function
-    """
-
-    question_len = list()
-    label_list = list()
-    for ex in batch:
-        question_len.append(len(ex[0]))
-        label_list.append(ex[1])
-    target_labels = torch.LongTensor(label_list)
-    x1 = torch.LongTensor(len(question_len), max(question_len), len(ex[0][0])).zero_()
-    for i in range(len(question_len)):
-        question_text = batch[i][0]
-        vec = torch.LongTensor(question_text)
-        x1[i, :len(question_text)].copy_(vec)
-    q_batch = {'text': x1, 'len': torch.FloatTensor(question_len), 'labels': target_labels}
-    return q_batch
-
+def sents_embed(sents, boe):
+    embeds = []
+    for sent in sents:
+        embed = []
+        for token in sent:
+            if token not in boe:
+                embed.append(boe[PAD])
+                continue
+            embed.append(boe[token])
+        embeds.append(embed)
+    #embeds = np.asarray(embeds)
+    embeds = torch.tensor(embeds)
+    return embeds
 
 class LSTMClassifier(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, num_classes, boe):
+    def __init__(self, embedding_dim, hidden_dim, num_classes, batch):
         super(LSTMClassifier, self).__init__()
         self.hidden_dim = hidden_dim
         
         self.lstm = nn.LSTM(embedding_dim, hidden_dim)
-        self.embedding = boe
+        
+        self.batch_size = batch
 
         self.hidden2tag = nn.Linear(hidden_dim, num_classes)
         self.linear = nn.Linear(num_classes,1)
         self.hidden = self.init_hidden()
 
     def init_hidden(self):
-        return (torch.zeros(1, 1, self.hidden_dim),torch.zeros(1, 1, self.hidden_dim))
+        return (torch.zeros(1, self.batch_size, self.hidden_dim),\
+                torch.zeros(1, self.batch_size, self.hidden_dim))
     
-    def sent_embed(self, sent):
-        embed = []
-        for token in sent:
-            if token not in self.embedding:
-                print("here")
-                continue
-            embed.append(self.embedding[token])
-        print("----------------------")
-        print(torch.tensor(embed).size())
-        return torch.tensor(embed)
+    
         
-    def forward(self, sentence):
-        embed = Variable(self.sent_embed(sentence))
-        print(len(sentence))
-        print(sentence)
+    def forward(self, sentences, sent_lengths):
+        X = torch.nn.utils.rnn.pack_padded_sequence(sentences, sent_lengths, batch_first=True)
         lstm_out, self.hidden = self.lstm(
-            embed.view(embed.size(0), 1, -1), self.hidden)
-        tag_space = self.hidden2tag(lstm_out[-1].view(-1))
-        tag_scores = F.sigmoid(self.linear(tag_space))
-        return tag_scores
+           X.view(sentences.size(0), self.batch_size, -1), self.hidden)
+        
+        X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
+        X = X.contiguous()
+        X = X.view(-1, X.shape[2])
+        X = self.hidden_to_tag(X)
+        tag_score = F.sigmoid(self.linear(X))
+        return tag_score
 
 def main(args):
     hyper_param = {}
@@ -119,7 +118,15 @@ def main(args):
         boe[l[0]] = [float(i) for i in lst]
         hyper_param["embedding_dim"] = len(boe[l[0]])    
     
+    boe[PAD] = [0]*200  # "<PAD>" has embedding 0*200   
     
+    model = LSTMClassifier(hyper_param["embedding_dim"],\
+                           hyper_param["hidden_dim"], \
+                           hyper_param["num_classes"],\
+                           hyper_param["batch"])
+    loss_function = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), hyper_param["lr"])
+        
     # read in data and transfer to embeddings
     data = []
     with open("processed_data.csv") as file:
@@ -135,43 +142,32 @@ def main(args):
             
     
     train_data = data[:NUM_TRAIN]
-#    print(train_data[0])
-#    train_dataset = Question_Dataset(train_data)
-#    train_loader = torch.utils.data.DataLoader(train_dataset, \
-#                                             batch_size=hyper_param["batch"],\
-#                                             shuffle=True, num_workers=0,\
-#                                             collate_fn=batchify)
-#    dev_data = data[NUM_TRAIN: NUM_TRAIN+NUM_DEV]
-#    dev_dataset = Question_Dataset(dev_data)
-#    dev_loader = torch.utils.data.DataLoader(dev_dataset, \
-#                                             batch_size=hyper_param["batch"],\
-#                                             shuffle=True, num_workers=0,\
-#                                             collate_fn=batchify)
-#    test_data = data[NUM_TRAIN+NUM_DEV:]
-#    test_dataset = Question_Dataset(test_data)
-#    test_loader = torch.utils.data.DataLoader(test_dataset, \
-#                                             batch_size=hyper_param["batch"],\
-#                                             shuffle=True, num_workers=0,\
-#                                             collate_fn=batchify)
-        
-    model = LSTMClassifier(hyper_param["embedding_dim"],\
-                           hyper_param["hidden_dim"], \
-                           hyper_param["num_classes"], boe)
-    loss_function = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), hyper_param["lr"])
+    p_sents, labels, lengths = pad(train_data)
+    sents = sents_embed(p_sents, boe)
+    labels = torch.tensor(labels)
+    lengths = torch.tensor(lengths)
+    dataset = FeatureData(sents, labels, lengths)
+    train_loader = DataLoader(dataset=dataset,\
+                              batch_size=hyper_param["batch"],\
+                              shuffle=True,\
+                              num_workers=2)
+    
     
     for epoch in range(hyper_param["epochs"]): 
-        for sentence, label in train_data:
-            label = Variable(torch.FloatTensor([int(label)]))
+        for i, data in enumerate(train_loader, 0):
+            sents, labels, lengths = data
+            labels = Variable(labels)
+            sents = Variable(sents)
+            lengths = Variable(lengths)
             model.zero_grad()
     
             model.hidden = model.init_hidden()
     
 #            sentence_in = prepare_sequence(sentence, word_to_ix)
 #            targets = prepare_sequence(tags, tag_to_ix)
-            tag_scores = model(sentence)
+            tag_scores = model(sents, lengths)
     
-            loss = loss_function(tag_scores, label)
+            loss = loss_function(tag_scores, labels)
             loss.backward()
             optimizer.step()
         
