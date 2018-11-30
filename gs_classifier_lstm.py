@@ -19,9 +19,9 @@ from nltk.corpus import wordnet as wn
 import string
 import collections
 
-NUM_TRAIN = 3000
-NUM_DEV = 315
-NUM_TEST = 315
+# NUM_TRAIN = 3000
+# NUM_DEV = 315
+# NUM_TEST = 315
 PAD = "<PAD>"
 
 torch.manual_seed(1)
@@ -45,14 +45,15 @@ class FeatureData(Dataset):
 # return the list of padded data, labels, and a list of len
 def pad(data):
     lengths = [len(sentence) for sentence, label in data]
-    longest = max(lengths)
+    # longest = max(lengths)
+    longest = 40
     paddeds = []
     labels = []
     for i, y_len in enumerate(lengths):
         sequence, label = data[i]
         labels.append(int(label))
         padded = [PAD]*longest
-        padded[0:y_len] = sequence[:y_len]
+        padded[0:min(y_len, longest)] = sequence[:min(y_len, longest)]
         paddeds.append(padded)
     
     return paddeds, labels, lengths
@@ -91,10 +92,11 @@ class LSTMClassifier(nn.Module):
         super(LSTMClassifier, self).__init__()
         self.hidden_dim = hidden_dim
         
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=2, bidirectional=True)
         self.batch_size = batch
-        self.hidden2tag = nn.Linear(hidden_dim, 1)
+        self.hidden2tag = nn.Linear(hidden_dim*2, 1)
         self.hidden = self.init_hidden()
+        self.dropout = nn.Dropout(0.3)
 
     def init_hidden(self):
         return (torch.zeros(1, self.batch_size, self.hidden_dim),
@@ -104,7 +106,8 @@ class LSTMClassifier(nn.Module):
         output, (hidden, cell) = self.lstm(sentences)
         mask = sentences.ge(0.)
         mask = mask.type(torch.FloatTensor).cuda()
-        output = output * mask[:, :, :self.hidden_dim]
+        # output = output * mask[:, :, :self.hidden_dim]
+        output = output * mask
         output = torch.sum(output, dim=1)
         X = self.hidden2tag(output)
         tag_score = F.sigmoid(X)
@@ -125,7 +128,7 @@ def binary_accuracy(preds, y):
 
 def main(args):
     hyper_param = {}
-    hyper_param["epochs"] = 20
+    hyper_param["epochs"] = 40
     hyper_param["lr"] = .0001
     hyper_param["batch"] = 32
     hyper_param["hidden_dim"] = 100
@@ -161,7 +164,11 @@ def main(args):
             if len(q_tokens) == 0:
                 continue
             data.append((q_tokens, row[3]))
-    
+
+    N = len(data)
+    NUM_TRAIN = int(0.8*N)
+    NUM_DEV = int(0.1*N)
+
     train_data = data[:NUM_TRAIN]
     train_p_sents, train_labels, train_lengths = pad(train_data)
     train_sents = sents_embed(train_p_sents, boe)
@@ -169,6 +176,10 @@ def main(args):
     dev_data = data[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
     dev_p_sents, dev_labels, dev_lengths = pad(dev_data)
     dev_sents = sents_embed(dev_p_sents, boe)
+
+    test_data = data[NUM_TRAIN+NUM_DEV:]
+    test_p_sents, test_labels, test_lengths = pad(test_data)
+    test_sents = sents_embed(test_p_sents, boe)
 
     for epoch in range(hyper_param["epochs"]):
         train_avg_loss = 0.
@@ -214,6 +225,26 @@ def main(args):
         dev_avg_loss = dev_avg_loss / count
         dev_avg_acc = dev_avg_acc / count
         print('Epoch: %d, Dev Loss: %.2f, Dev Acc: %.2f' % (epoch, dev_avg_loss, dev_avg_acc))
+        test_avg_loss = 0.
+        test_avg_acc = 0.
+        count = 0
+        for sents, labels, lengths in iterate_minibatches(test_sents, test_labels, test_lengths,
+                                                          hyper_param["batch"]):
+            labels = torch.tensor(labels).type(torch.FloatTensor)
+            sents = torch.tensor(sents).type(torch.FloatTensor).cuda()
+            labels = Variable(labels)
+            sents = Variable(sents)
+            model.hidden = model.init_hidden()
+            preds = model(sents)[:, 0]
+            preds = preds.type(torch.FloatTensor)
+            loss = loss_function(preds, labels)
+            acc = binary_accuracy(preds, labels)
+            test_avg_loss += loss
+            test_avg_acc += acc
+            count += 1
+        test_avg_loss = test_avg_loss / count
+        test_avg_acc = test_avg_acc / count
+        print('Epoch: %d, Test Loss: %.2f, Test Acc: %.2f' % (epoch, test_avg_loss, test_avg_acc))
 
 
 if __name__ == '__main__':
