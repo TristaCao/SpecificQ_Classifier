@@ -26,9 +26,10 @@ PAD = "<PAD>"
 
 torch.manual_seed(1)
 
+
 class FeatureData(Dataset):
     def __init__(self, x, y, length):
-        self.len = x.size(0)
+        self.len = len(x)
         self.x_data = x
         self.length = length
         self.y_data = y
@@ -38,6 +39,7 @@ class FeatureData(Dataset):
     
     def __len__(self):
         return self.len
+
 
 # take in a list of data and pad them
 # return the list of padded data, labels, and a list of len
@@ -55,6 +57,7 @@ def pad(data):
     
     return paddeds, labels, lengths
 
+
 def sents_embed(sents, boe):
     embeds = []
     for sent in sents:
@@ -66,48 +69,66 @@ def sents_embed(sents, boe):
             embed.append(boe[token])
         embeds.append(embed)
     #embeds = np.asarray(embeds)
-    embeds = torch.tensor(embeds)
+    # embeds = torch.tensor(embeds)
     return embeds
+
+
+def iterate_minibatches(sents, labels, lengths, batch_size, shuffle=True):
+    if shuffle:
+        indices = np.arange(len(sents))
+        np.random.shuffle(indices)
+    for start_idx in range(0, len(sents) - batch_size + 1, batch_size):
+        if shuffle:
+            ex = indices[start_idx:start_idx + batch_size]
+        else:
+            ex = slice(start_idx, start_idx + batch_size)
+        yield np.array(sents)[ex], np.array(labels)[ex], np.array(lengths)[ex]
+
 
 class LSTMClassifier(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, num_classes, batch):
+    def __init__(self, embedding_dim, hidden_dim, batch):
         super(LSTMClassifier, self).__init__()
         self.hidden_dim = hidden_dim
         
         self.lstm = nn.LSTM(embedding_dim, hidden_dim)
-        
         self.batch_size = batch
-
-        self.hidden2tag = nn.Linear(hidden_dim, num_classes)
-        self.linear = nn.Linear(num_classes,1)
+        self.hidden2tag = nn.Linear(hidden_dim, 1)
         self.hidden = self.init_hidden()
 
     def init_hidden(self):
-        return (torch.zeros(1, self.batch_size, self.hidden_dim),\
+        return (torch.zeros(1, self.batch_size, self.hidden_dim),
                 torch.zeros(1, self.batch_size, self.hidden_dim))
-    
-    
-        
-    def forward(self, sentences, sent_lengths):
-        X = torch.nn.utils.rnn.pack_padded_sequence(sentences, sent_lengths, batch_first=True)
-        lstm_out, self.hidden = self.lstm(
-           X.view(sentences.size(0), self.batch_size, -1), self.hidden)
-        
-        X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
-        X = X.contiguous()
-        X = X.view(-1, X.shape[2])
-        X = self.hidden_to_tag(X)
-        tag_score = F.sigmoid(self.linear(X))
+
+    def forward(self, sentences):
+        output, (hidden, cell) = self.lstm(sentences)
+        mask = sentences.ge(0.)
+        mask = mask.type(torch.FloatTensor).cuda()
+        output = output * mask[:, :, :self.hidden_dim]
+        output = torch.sum(output, dim=1)
+        X = self.hidden2tag(output)
+        tag_score = F.sigmoid(X)
+
         return tag_score
+
+
+def binary_accuracy(preds, y):
+    """
+    Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
+    """
+    #round predictions to the closest integer
+    rounded_preds = torch.round(preds)
+    correct = (rounded_preds == y).float() #convert into float for division
+    acc = correct.sum()/len(correct)
+    return acc
+
 
 def main(args):
     hyper_param = {}
-    hyper_param["epochs"] = 60
-    hyper_param["lr"] = .005
+    hyper_param["epochs"] = 20
+    hyper_param["lr"] = .0001
     hyper_param["batch"] = 32
-    hyper_param["num_classes"] = 2
-    hyper_param["hidden_dim"] = 50
+    hyper_param["hidden_dim"] = 100
     
     # import the pre-trained word embeddings
     embedding_vectors = open("vectors.txt")
@@ -120,10 +141,11 @@ def main(args):
     
     boe[PAD] = [0]*200  # "<PAD>" has embedding 0*200   
     
-    model = LSTMClassifier(hyper_param["embedding_dim"],\
-                           hyper_param["hidden_dim"], \
-                           hyper_param["num_classes"],\
+    model = LSTMClassifier(hyper_param["embedding_dim"],
+                           hyper_param["hidden_dim"],
                            hyper_param["batch"])
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
     loss_function = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), hyper_param["lr"])
         
@@ -139,38 +161,60 @@ def main(args):
             if len(q_tokens) == 0:
                 continue
             data.append((q_tokens, row[3]))
-            
     
     train_data = data[:NUM_TRAIN]
-    p_sents, labels, lengths = pad(train_data)
-    sents = sents_embed(p_sents, boe)
-    labels = torch.tensor(labels)
-    lengths = torch.tensor(lengths)
-    dataset = FeatureData(sents, labels, lengths)
-    train_loader = DataLoader(dataset=dataset,\
-                              batch_size=hyper_param["batch"],\
-                              shuffle=True,\
-                              num_workers=2)
-    
-    
-    for epoch in range(hyper_param["epochs"]): 
-        for i, data in enumerate(train_loader, 0):
-            sents, labels, lengths = data
+    train_p_sents, train_labels, train_lengths = pad(train_data)
+    train_sents = sents_embed(train_p_sents, boe)
+
+    dev_data = data[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
+    dev_p_sents, dev_labels, dev_lengths = pad(dev_data)
+    dev_sents = sents_embed(dev_p_sents, boe)
+
+    for epoch in range(hyper_param["epochs"]):
+        train_avg_loss = 0.
+        train_avg_acc = 0.
+        count = 0
+        for sents, labels, lengths in iterate_minibatches(train_sents, train_labels, train_lengths,
+                                                          hyper_param["batch"]):
+            labels = torch.tensor(labels).type(torch.FloatTensor)
+            sents = torch.tensor(sents).type(torch.FloatTensor).cuda()
             labels = Variable(labels)
             sents = Variable(sents)
-            lengths = Variable(lengths)
             model.zero_grad()
-    
             model.hidden = model.init_hidden()
-    
-#            sentence_in = prepare_sequence(sentence, word_to_ix)
-#            targets = prepare_sequence(tags, tag_to_ix)
-            tag_scores = model(sents, lengths)
-    
-            loss = loss_function(tag_scores, labels)
+            preds = model(sents)[:, 0]
+            preds = preds.type(torch.FloatTensor)
+            loss = loss_function(preds, labels)
+            acc = binary_accuracy(preds, labels)
+            train_avg_loss += loss
+            train_avg_acc += acc
             loss.backward()
             optimizer.step()
-        
+            count += 1
+        train_avg_loss = train_avg_loss / count
+        train_avg_acc = train_avg_acc / count
+        print('Epoch: %d, Train Loss: %.2f, Train Acc: %.2f' % (epoch, train_avg_loss, train_avg_acc))
+        dev_avg_loss = 0.
+        dev_avg_acc = 0.
+        count = 0
+        for sents, labels, lengths in iterate_minibatches(dev_sents, dev_labels, dev_lengths,
+                                                          hyper_param["batch"]):
+            labels = torch.tensor(labels).type(torch.FloatTensor)
+            sents = torch.tensor(sents).type(torch.FloatTensor).cuda()
+            labels = Variable(labels)
+            sents = Variable(sents)
+            model.hidden = model.init_hidden()
+            preds = model(sents)[:, 0]
+            preds = preds.type(torch.FloatTensor)
+            loss = loss_function(preds, labels)
+            acc = binary_accuracy(preds, labels)
+            dev_avg_loss += loss
+            dev_avg_acc += acc
+            count += 1
+        dev_avg_loss = dev_avg_loss / count
+        dev_avg_acc = dev_avg_acc / count
+        print('Epoch: %d, Dev Loss: %.2f, Dev Acc: %.2f' % (epoch, dev_avg_loss, dev_avg_acc))
+
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
