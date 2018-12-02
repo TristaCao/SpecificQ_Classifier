@@ -90,6 +90,8 @@ class LSTMClassifier(nn.Module):
     
         
     def forward(self, sentences, sent_lengths):
+        print(sentences.size())
+        print(sent_lengths.size())
         X = torch.nn.utils.rnn.pack_padded_sequence(sentences, sent_lengths, batch_first=True)
         lstm_out, self.hidden = self.lstm(
            X.view(sentences.size(0), self.batch_size, -1), self.hidden)
