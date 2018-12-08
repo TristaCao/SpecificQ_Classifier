@@ -58,7 +58,7 @@
 
 \newcommand\BibTeX{B{\sc ib}\TeX}
 
-\title{Specificity-Controlled Clarification Question Generation Model}
+\title{Controlling the Specificity of Clarification Question Generation}
 
 \date{}
 
@@ -66,25 +66,64 @@
 \maketitle
 \begin{abstract}
 
+%Clarification questions can be defined as questions that point at some missing information in a given context. 
+%We find that training a sequence-to-sequence neural network model to generate a clarification question given a context results in generic and bland questions.
+%We argue that controlling the level of specificity of the generated question to a given context is useful. 
+%We, therefore, propose a model which given a context and a level of specificity (generic or specific), generates a clarification question at that level of specificity. 
+%We develop a specificity classifier to automatically label the large number of clarification questions in the training data. 
+%We evaluate our model on the amazon question-answering dataset using both automatic metrics and human judgments and show that our proposed model can control the level of specificity of the generated questions. 
+
+Unlike comprehension-style questions, clarification questions look for some missing information in a given context. 
+However, without guidance, neural models for question generation lead to generic and bland questions that cannot elicit useful information. 
+We propose a neural clarification question generation model with controllable level of specificity to the given context. 
+To train the question generation model, we automatically generate the specificity labels (generic or specific) using a classifier trained on a small amount of annotated data. 
+Evaluated on Amazon questions dataset, our model demonstrates controllable specificity according to both automatic metrics and human judgments.
+
 \end{abstract}
 
 \section{Introduction}
 
-In the last chapter, we saw how we can train a sequence-to-sequence neural network model to generate a useful question given an under-specified context. 
-We used answer-based adversarial training strategy to train the sequence-to-sequence model. One of our key findings was that an adversarially trained model generates questions that are more specific to the context compared to a model trained using the traditional maximum-likelihood training objective.
+With the advancements of artificial intelligence technologies, automated agents such as text-based or voice-based search engines, interactive systems, etc are becoming increasingly common in our day-to-day lives.
+We frequently use these bots to search for information or accomplish certain tasks. 
+However, often when a human user's input to a bot is underspecified i.e. it is missing some information, the bot might fail in its task. 
+In such a scenario, the bot can be much more useful if it could try to establish a common understanding with the use by asking relevant clarification questions.
+In the field of natural language processing, the task of question generation has been predominantly defined as given a text, generate a question whose answer can be found in the given text \cite{heilman2011automatic}.
+In this work, however, we look at the task of clarification question generation i.e. generating questions that point at missing information in a given text. 
+
+Recent advances in neural network modeling has triggered several sequence-to-sequence learning \cite{sutskever2014sequence} based methods for question generation \cite{serban2016generating,duan2017question,du2017learning}. 
+We find that training a sequence-to-sequence neural network model to generate a clarification question given a context results in generic and bland questions, similar to recent findings in dialogue generation \cite{li2016deep}.
+In our work, we hypothesize that, with guidance, we can train a sequence-to-sequence model to control the level of specificity of the generated questions. 
 Generating questions with a desired level of specificity can be useful in many scenarios.
-For instance, consider an automated agent assisting a human in a technical issue through a dialogue. 
-At the start of the conversation, we would want the automated agent to ask the human more generic questions in order to understand the general domain of the problem. Whereas, at a later stage of the conversation, we would want the agent to ask more specific questions to narrow down the problem. 
+%For instance, consider an automated agent assisting a human in a technical issue through a dialogue. 
+%At the start of the conversation, we would want the automated agent to ask the human more generic questions in order to understand the general domain of the problem. Whereas, at a later stage of the conversation, we would want the agent to ask more specific questions to narrow down the problem. 
 In the e-retail scenario considered in this dissertation,  if the given description belongs to a product which is similar to several other products that currently exist in the dataset, then we might want our automated system to generate more specific questions (since we could easily generate generic questions for this product by retrieving the top-K frequently asked questions in the dataset, for instance).
 On the other hand, if the given product belongs to a fairly new category, then we might want our system to generate more generic questions. 
 In this chapter, therefore, we propose to build a model that given a context and a level of specificity (specific or generic), generates a question with that level of specificity.
 For instance, in \autoref{fig:amazon_style_cqa}, given a product description (context) and a level of specificity as ``$<$generic$>$'', our goal is to generate a question such as \textit{``Where was this manufactured?''} which is applicable to many products on amazon.com. 
 Whereas, given the same product description and the level of specificity as ``$<$specific$>$'', we would like to generate a question that is more specific to the given product such as \textit{``Is this induction safe?''}
 
-\begin{figure*}[h]
-	\fbox{\includegraphics[width=\textwidth]{amazon_style_example}}
-    \caption{Sample product description from amazon.com paired with a generic and a specific clarification question.}\label{fig:amazon_style_cqa}
-\end{figure*}
+\begin{table*}[t]
+\centering
+\begin{tabular}{l | l}
+\toprule
+Product title & T-fal Cookware Set, Nonstick Cookware Set, 18 pieces, Red \\
+\midrule
+Product & Easy non-stick 18pc set includes every piece for your everyday meals. \\
+description & Exceptionally durable dishwasher safe cookware for easy clean up.\\
+& Durable non-stick interior\\
+\midrule
+Generic question & Where was this manufactured?\\
+\midrule
+Specific question & Is this induction safe?\\
+\bottomrule
+\end{tabular}
+\caption{Sample product description from amazon.com paired with a generic and a specific clarification question.}\label{tab:specificity-classifier-results}
+\end{table*}
+
+%\begin{figure*}[h]
+%	\fbox{\includegraphics[width=\textwidth]{amazon_style_example}}
+%    \caption{Sample product description from amazon.com paired with a generic and a specific clarification question.}\label{fig:amazon_style_cqa}
+%\end{figure*}
 
 We take a semi-supervised approach to our problem of generating specificity controlled questions. Motivated by Sennrich et al. \cite{sennrich2016controlling}, we build a question generation model that incorporates the level of specificity as additional input signal during training\footnote{Sennrich et al. \cite{sennrich2016controlling} refer to this as side constraints.}. In our work, we hypothesize that at training time if we append the context (source) with the level of specificity of the question (target), then the model will learn how to generate questions that at a given level of specificity. In \autoref{fig:style_clarification_roadmap}, the question generation model is trained using context appended with specificity as input and question as the output. In order to do this training, we would need to label all the questions in our training data with their level of specificity i.e. generic vs specific. Doing this labeling manually for the entire training dataset of approximately 150K questions would be too expensive. Hence, we train a supervised model that can learn to automatically label a question (given a context) with its level of specificity to the given context. \autoref{fig:style_clarification_roadmap} shows our specificity classifier trained using a relatively small set of questions manually annotated with their level of specificity. 
 
@@ -106,6 +145,13 @@ At test time, given a context appended with a level of specificity (generic or s
 %\autoref{fig:amazon_style_cqa} shows two example (context, question) pairs. The first context is appended with the ``generic'' tag since the question paired with it is a generic question, whereas the second context is appended with the ``specific'' tag since the question paired with it is a specific question.  
 
 \section{Related Work}
+
+\subsection{Neural Models for Question Generation}
+Recently, there have been work on generating reading comprehension style questions using such neural network models. 
+\cite{serban2016generating} created a large (30 million) factoid question-answering dataset by transforming facts in the Freebase into natural language questions. 
+Their question generation model was inspired by the well-known attention-based encoder-decoder model \citep{luong2015effective} used for machine translation.
+\cite{duan2017question} extract a large number of question-answer pairs from community question answering forums and use them to train an attention-based sequence-to-sequence learning approach to generate challenging questions for the reading comprehension task.  They find that their approach outperforms previous rule-based question generation approaches when evaluated using automatic metrics and human judgments. 
+\cite{du2017learning} propose an attention-based encoder-decoder model for generating questions from text passages and show that humans find the questions generated by their model to be more natural and more difficult to answer compared to rule-based systems. 
 
 We consider specificity as a dimension of style. Sociolinguistics defines style as a set of linguistic variants with specific social meanings. 
 Hovy \cite{hovy1987generating} argues that by varying the style of a text, people convey more information than is present in the literal meaning of the words.
@@ -194,16 +240,17 @@ Given these features, we train a logistic regression model to make a binary pred
 
 \section{Specificity-Controlled Question Generation Model}
 
+Sequence-to-sequence based network based models \citep{sutskever2014sequence} have had significant success at a variety of text generation tasks, 
+including machine translation \citep{BahdanauCB15,luong2015effective}, 
+summarization \citep{nallapati2016abstractive}, 
+dialog \citep{serban2016building,bordes2016learning,li2016persona,serban2017hierarchical}, 
+textual style transfer \citep{jhamtani2017shakespearizing,kabbara2016stylistic,rao2018dear} and 
+question answering \citep{yin2016neural,serban2016building}.
+The key idea behind these sequence-to-sequence approaches is that given large amounts of input, output sequence pairs, the model learns internal representations such that at test time, given an input sequence, it generates the appropriate output sequence. 
+
 We use the specificity classifier described in the previous section to label all the questions in the training (and tune) data with generic/specific labels. 
 We use these labels to append each context with the \textit{$<$specific$>$} tag when the question paired with the context is labeled as specific and with the \textit{$<$generic$>$} tag when the question paired with the context is labeled as generic.
-We use this specificity annotated training data to train two specificity-controlled question generation model:\\
-
-\noindent \textbf{Specificity-MLE}: Similar to the \textbf{MLE} model in the previous chapter, we train a sequence-to-sequence learning model \cite{sutskever2014sequence} on (context+specificity, question) pairs using maximum likelihood objective (\autoref{sec:seq2seq}). \\
-
-\noindent \textbf{Specificity-GAN-Utility}: This is the full question generation model described in previous chapter which we train using (context+specificity, question) pairs instead of (context, question) pairs. 
-We first pretrain a question generator on (context+specificity, question) pairs and an answer generator model using (context+specificity+question, answer) pairs using maximum likelihood objective. 
-We then fine tune the question generator model using \utility function based GAN training (\autoref{sec:gan}) including the \utility discriminator, a \mixer question generator. \\
- 
+We train a sequence-to-sequence learning model \cite{sutskever2014sequence} on (context+specificity, question) pairs using maximum likelihood objective. 
 At test time, we predict the specificity level of the target question using our specificity classifier and append the tag corresponding to that label to the context. 
 
 \section{Experimental Results}
@@ -244,10 +291,7 @@ Reference & 0.6071  & --- & --- & 0.7474 & --- & --- \\
 Lucene & 0.6289  & 2.90  & 12.04  & 0.6289 & 1.76 & 6.96\\
 \midrule
 MLE & 0.1201  & 12.61  & 13.29  & 0.1201 & 1.41 &  5.06\\
-Max-Utility &  0.1299  &  12.17  & 14.06  & 0.1299 & 1.79  & 5.57\\
-GAN-Utility &   0.1304 & 12.01 & \bf 14.35  & 0.1304 & 2.69 & 6.12\\
 Specificity-MLE & 0.1023 &  12.61 & 13.53 & \bf 0.1640 & \bf 4.45 & \bf 7.85\\
-Specificity-GAN-Utility &  \bf 0.1012 & \bf 12.84 & 14.18 & 0.1357 & 2.95 & 6.08 \\
 \bottomrule
 \end{tabular}
 \caption{\diversity as measured by the proportion of unique trigrams in model outputs. \bleu and \meteor scores are calculated using an average of 6 references under \textit{generic} setting and using an average of 3 references under \textit{specific} setting. 
@@ -313,12 +357,8 @@ We use automatic metric based evaluation to show that our specificity-controlled
 Reference & do you need a separate box springs to go with this mattress ?\\
 Lucene & how long does this matress last ? \\
 MLE & what is the weight limit for this mattress ?\\
-Max-Utility & what is the weight limit for this mattress ?  \\
-GAN-Utility & what are the dimensions of the mattress pad pad ?\\
 Spec-MLE (g) & does it come with a cover ? \\
 Spec-MLE (s) & does this mattress come with a box spring ?\\
-Spec-GAN-Utility (g) &  what is the warranty on this mattress ?\\
-Spec-GAN-Utility (s) & what is the density of the mattress ? \\
 \bottomrule
 
  \toprule
@@ -339,12 +379,8 @@ Reference & does this fit an older model kitchenaid mixer-grinder attachment \\
 & fga model or not ? some reviewers are saying it does not fit ?\\
 Lucene & can anyone confirm the dimensions of the square hole ? \\
 MLE & will this fit the ?\\
-Max-Utility & can this be used to grind almonds ?  \\
-GAN-Utility & does this blade fit the?\\
 Spec-MLE (g) & does it come with a blade ? \\
 Spec-MLE (s) & does this blade work with the kitchenaid professional model ?\\
-Spec-GAN-Utility (g) &  will this blade work with the weston model ?\\
-Spec-GAN-Utility (s) & does this work well for a full size ? like a fine blade ? \\
 \bottomrule
 
 \end{tabular}
