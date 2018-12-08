@@ -111,7 +111,6 @@ class LSTMClassifier(nn.Module):
         output = torch.sum(output, dim=1)
         X = self.hidden2tag(output)
         tag_score = F.sigmoid(X)
-
         return tag_score
 
 
