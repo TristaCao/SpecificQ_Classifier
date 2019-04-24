@@ -16,7 +16,9 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-NUM_TRAIN = 3000
+NUM_TRAIN = 2350
+#FILE_IN = "processed_data.csv"
+FILE_IN = "aggre_anno.csv"
 
 def sent_len(q_tokens):
     return len(q_tokens)
@@ -235,7 +237,7 @@ def main(args):
     idf_corpus = [] # a list of docs -- product description + questions
     c_qs = {} # dictionary of description --> questions
 
-    with open("processed_data.csv") as file:
+    with open(FILE_IN) as file:
         f = reader(file, delimiter = ',')
         next(f)
         for row in f:
@@ -286,15 +288,17 @@ def main(args):
 
 
     label_features = []
-    with open("processed_data.csv") as file:
+    with open(FILE_IN) as file:
         f = reader(file, delimiter = ',')
         next(f)
         for row in f:
             feature = []
-            q = row[1]
+#            q = row[1]
+            q = row[3]
             q_no_punc = q.translate(str.maketrans('','',string.punctuation))
             q_tokens = word_tokenize(q_no_punc)
-            c = row[0]
+#            c = row[0]
+            c = row[2]
             c_no_punc = c.translate(str.maketrans('','',string.punctuation))
             c_tokens = word_tokenize(c_no_punc)
             f0 = sent_len(q_tokens)
@@ -305,10 +309,17 @@ def main(args):
             f18 = hypernym_match(q_tokens,c_tokens)
             f19, f20, f21 = similarity(q_tokens,c_tokens, boe)
             f22 = word_count(q_tokens, word_type).tolist()
+#            label = row[3]
+            label = row[5]
+            if label == 's':
+                label = 1
+            elif label == 'g':
+                label = 0
+            else:
+                continue
 
 
-
-            feature.append(row[3])
+            feature.append(label)
             feature.append(f0)
             feature.append(f1)
             feature.append(f2)
