@@ -8,6 +8,7 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from sklearn.svm import SVR
+import pickle
 
 NUM_TRAIN = 2350
 NUM_DEV = 290
@@ -17,6 +18,8 @@ NUM_TEST = 290
 #NUM_DEV = 315
 #NUM_TEST = 315
 FINAL = False
+
+MODEL_FILE = "classifier.sav"
 
 class FeatureData(Dataset):
     def __init__(self, x, y):
@@ -51,10 +54,10 @@ def main(args):
     y = xy[:,[0]]
 
 
-#    train_x = x[0:NUM_TRAIN]
-#    train_y = y[0:NUM_TRAIN]
-#    dev_x = x[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
-#    dev_y = y[NUM_TRAIN:NUM_TRAIN+NUM_DEV]
+    dev_x = x[0:NUM_DEV]
+    dev_y = y[0:NUM_DEV]
+    train_x = np.concatenate((x[0:0*NUM_DEV],x[0*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
+    train_y = np.concatenate((y[0:0*NUM_DEV],y[0*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
 #    test_x = x[NUM_TRAIN+NUM_DEV:]
 #    test_y = y[NUM_TRAIN+NUM_DEV:]
 #    hyper_param = {}
@@ -68,41 +71,48 @@ def main(args):
 #                              shuffle=True,\
 #                              num_workers=2)
 #    
-#    model = SVR( C=15, epsilon=0.01)
-#    
-#    model = model.fit(train_x, train_y)
-#    test_acc = accuracy(model.predict(dev_x),dev_y)
-#    print("Train acc: " + str(accuracy(model.predict(train_x), train_y)))
-#    print("Testing acc: " + str(test_acc))
+    model = SVR( C=15, epsilon=0.01)
     
-    overall = 0
-    for group_num in range(9):
-        dev_x = x[group_num*NUM_DEV:group_num*NUM_DEV+NUM_DEV]
-        dev_y = y[group_num*NUM_DEV:group_num*NUM_DEV+NUM_DEV]
-        train_x = np.concatenate((x[0:group_num*NUM_DEV],x[group_num*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
-        train_y = np.concatenate((y[0:group_num*NUM_DEV],y[group_num*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
-                
-        hyper_param = {}
-        hyper_param["epochs"] = 30
-        hyper_param["lr"] = .001
-        hyper_param["batch"] = 16
-        
-        dataset = FeatureData(train_x, train_y)
-        train_loader = DataLoader(dataset=dataset,\
-                                  batch_size=hyper_param["batch"],\
-                                  shuffle=True,\
-                                  num_workers=2)
-        
-        model = SVR( C=15, epsilon=0.03)
-        
-        model = model.fit(train_x, train_y)
-        test_acc = accuracy(model.predict(dev_x),dev_y)
-        overall += test_acc
-        print("Group " + str(group_num) + "-------------------------")
-        print("Train acc: " + str(accuracy(model.predict(train_x), train_y)))
-        print("Testing acc: " + str(test_acc))
-        
-    print("Overall acc: " + str(overall/9))
+    model = model.fit(train_x, train_y)
+    
+    #save model
+    pickle.dump(model, open(MODEL_FILE, 'wb'))
+    # load and use model as following:
+    #loaded_model = pickle.load(open(filename, 'rb'))
+    # y = loaded_model.predict(test_x)
+    
+    test_acc = accuracy(model.predict(dev_x),dev_y)
+    print("Train acc: " + str(accuracy(model.predict(train_x), train_y)))
+    print("Testing acc: " + str(test_acc))
+    
+#    overall = 0
+#    for group_num in range(9):
+#        dev_x = x[group_num*NUM_DEV:group_num*NUM_DEV+NUM_DEV]
+#        dev_y = y[group_num*NUM_DEV:group_num*NUM_DEV+NUM_DEV]
+#        train_x = np.concatenate((x[0:group_num*NUM_DEV],x[group_num*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
+#        train_y = np.concatenate((y[0:group_num*NUM_DEV],y[group_num*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
+#                
+##        hyper_param = {}
+##        hyper_param["epochs"] = 30
+##        hyper_param["lr"] = .001
+##        hyper_param["batch"] = 16
+#        
+##        dataset = FeatureData(train_x, train_y)
+##        train_loader = DataLoader(dataset=dataset,\
+##                                  batch_size=hyper_param["batch"],\
+##                                  shuffle=True,\
+##                                  num_workers=2)
+#        
+#        model = SVR( C=15, epsilon=0.03)
+#        
+#        model = model.fit(train_x, train_y)
+#        test_acc = accuracy(model.predict(dev_x),dev_y)
+#        overall += test_acc
+#        print("Group " + str(group_num) + "-------------------------")
+#        print("Train acc: " + str(accuracy(model.predict(train_x), train_y)))
+#        print("Testing acc: " + str(test_acc))
+#        
+#    print("Overall acc: " + str(overall/9))
     
 # Cross Validation
 #    Group0= 0.6828571428571428
