@@ -49,15 +49,19 @@ def main(args):
     train_x, train_y = None, None
     dev_x, dev_y = None, None
     test_x, test_y = None, None
-    xy = np.loadtxt('labels_features.csv', delimiter=',', dtype = np.float32)
-    x = xy[:,1:]
-    y = xy[:,[0]]
+    xy = np.loadtxt('labels_features_train.csv', delimiter=',', dtype = np.float32)
+    train_x = xy[:,1:]
+    train_y = xy[:,[0]]
+    xy = np.loadtxt('labels_features_dev.csv', delimiter=',', dtype = np.float32)
+    dev_x = xy[:,1:]
+    dev_y = xy[:,[0]]
 
 
-    dev_x = x[0:NUM_DEV]
-    dev_y = y[0:NUM_DEV]
-    train_x = np.concatenate((x[0:0*NUM_DEV],x[0*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
-    train_y = np.concatenate((y[0:0*NUM_DEV],y[0*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
+#    dev_x = x[0:NUM_DEV]
+#    dev_y = y[0:NUM_DEV]
+#    train_x = np.concatenate((x[0:0*NUM_DEV],x[0*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
+#    train_y = np.concatenate((y[0:0*NUM_DEV],y[0*NUM_DEV+NUM_DEV:NUM_DEV+NUM_TRAIN]))
+    
 #    test_x = x[NUM_TRAIN+NUM_DEV:]
 #    test_y = y[NUM_TRAIN+NUM_DEV:]
 #    hyper_param = {}

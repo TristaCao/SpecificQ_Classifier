@@ -17,8 +17,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 NUM_TRAIN = 2350
+NUM_DEV = 290
 #FILE_IN = "processed_data.csv"
-FILE_IN = "aggre_anno.csv"
+#FILE_IN = "aggre_anno.csv"
+FILE_IN_TRAIN = "aggre_anno_train.csv"
+FILE_IN_DEV = "aggre_anno_dev.csv"
 
 def sent_len(q_tokens):
     return len(q_tokens)
@@ -237,12 +240,15 @@ def main(args):
     idf_corpus = [] # a list of docs -- product description + questions
     c_qs = {} # dictionary of description --> questions
 
-    with open(FILE_IN) as file:
+    with open(FILE_IN_TRAIN) as file:
         f = reader(file, delimiter = ',')
         next(f)
         for row in f:
-            if count > NUM_TRAIN:
-                break
+#            if count < NUM_DEV:
+#                count += 1
+#                continue
+#            if count > NUM_DEV+NUM_TRAIN:
+#                break
             count += 1
             question = row[1]
             q_no_punc = question.translate(str.maketrans('','',string.punctuation))
@@ -288,7 +294,7 @@ def main(args):
 
 
     label_features = []
-    with open(FILE_IN) as file:
+    with open(FILE_IN_TRAIN) as file:
         f = reader(file, delimiter = ',')
         next(f)
         for row in f:
@@ -345,11 +351,78 @@ def main(args):
             feature += f22 #bag of words
             label_features.append(feature)
 
-    with open("word_feature_weights.csv", mode = 'w') as file:
-        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        w.writerow(word_type)
+#    with open("word_feature_weights.csv", mode = 'w') as file:
+#        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+#        w.writerow(word_type)
 
-    with open("labels_features.csv", mode = 'w') as file:
+    with open("labels_features_train.csv", mode = 'w') as file:
+        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for r in label_features:
+            w.writerow(r)
+            
+    label_features = []
+    with open(FILE_IN_DEV) as file:
+        f = reader(file, delimiter = ',')
+        next(f)
+        for row in f:
+            feature = []
+#            q = row[1]
+            q = row[3]
+            q_no_punc = q.translate(str.maketrans('','',string.punctuation))
+            q_tokens = word_tokenize(q_no_punc)
+#            c = row[0]
+            c = row[2]
+            c_no_punc = c.translate(str.maketrans('','',string.punctuation))
+            c_tokens = word_tokenize(c_no_punc)
+            f0 = sent_len(q_tokens)
+            f1, f2, f3, f4, f5 = ne_cd(q_tokens)
+            f6, f7, f8 = idf(q_tokens,idf_dic)
+            f9, f10, f11, f12, f13, f14 = polarity(q_tokens, liwc_dict, liwc_prefix)
+            f15, f16, f17 = num_hypernyms(q_tokens)
+            f18 = hypernym_match(q_tokens,c_tokens)
+            f19, f20, f21 = similarity(q_tokens,c_tokens, boe)
+            f22 = word_count(q_tokens, word_type).tolist()
+#            label = row[3]
+            label = row[5]
+            if label == 's':
+                label = 1
+            elif label == 'g':
+                label = 0
+            else:
+                continue
+
+
+            feature.append(label)
+            feature.append(f0)
+            feature.append(f1)
+            feature.append(f2)
+            feature.append(f3)
+            feature.append(f4)
+            feature.append(f5)
+            feature.append(f6)
+            feature.append(f7)
+            feature.append(f8)
+            feature.append(f9)
+            feature.append(f10)
+            feature.append(f11)
+            feature.append(f12)
+            feature.append(f13)
+            feature.append(f14)
+            feature.append(f15)
+            feature.append(f16)
+            feature.append(f17)
+            feature.append(f18)
+            feature.append(f19)
+            feature += f20.tolist() # embedding for q
+            feature += f21.tolist() # embedding for c
+            feature += f22 #bag of words
+            label_features.append(feature)
+
+#    with open("word_feature_weights.csv", mode = 'w') as file:
+#        w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+#        w.writerow(word_type)
+
+    with open("labels_features_dev.csv", mode = 'w') as file:
         w = writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         for r in label_features:
             w.writerow(r)
