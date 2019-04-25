@@ -10,9 +10,9 @@ import numpy as np
 from sklearn.svm import SVR
 import pickle
 
-NUM_TRAIN = 2350
-NUM_DEV = 290
-NUM_TEST = 290
+NUM_TRAIN = 2000
+NUM_DEV = 200
+NUM_TEST = 200
 
 #NUM_TRAIN = 2500
 #NUM_DEV = 315

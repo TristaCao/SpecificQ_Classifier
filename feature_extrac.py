@@ -16,8 +16,8 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-NUM_TRAIN = 2350
-NUM_DEV = 290
+NUM_TRAIN = 1600
+NUM_DEV = 200
 #FILE_IN = "processed_data.csv"
 #FILE_IN = "aggre_anno.csv"
 FILE_IN_TRAIN = "aggre_anno_train.csv"
