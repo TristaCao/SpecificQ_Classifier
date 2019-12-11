@@ -33,8 +33,10 @@ def write_tsv_file(input_csv_filename, output_tsv_filename, balance_data=False):
 
     with open(output_tsv_filename, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile, delimiter='\t')
+        i = 0
         for index in data_indices:
-            csv_writer.writerow([input_text[index], output_label[index]])
+            csv_writer.writerow(['a', i, output_label[index], input_text[index]])
+            i += 1
 
 def main(args):
     write_tsv_file(args.train_csv_file, args.output_train_tsv_file, balance_data=True)

@@ -10,6 +10,8 @@ from torchtext import data
 from torchtext import datasets
 from torchtext.vocab import Vectors, GloVe
 
+BATCH_SIZE = 32
+
 def load_dataset(args, test_sen=None):
 
     """
@@ -28,15 +30,18 @@ def load_dataset(args, test_sen=None):
     """
 
     tokenize = lambda x: x.split()
-    TEXT = data.Field(sequential=True, tokenize=tokenize, lower=True, include_lengths=True, batch_first=True,
-                      fix_length=50)
+    TEXT = data.Field(sequential=True, tokenize=tokenize, lower=True, include_lengths=True, batch_first=True,)
+                      #fix_length=200)
     # LABEL = data.LabelField(tensor_type=torch.FloatTensor)
     LABEL = data.LabelField()
     train_data = data.TabularDataset(path=args.train_data_tsv_file, format='tsv',
                                      fields=[('text', TEXT), ('label', LABEL)], skip_header=True)
     valid_data = data.TabularDataset(path=args.val_data_tsv_file, format='tsv',
                                      fields=[('text', TEXT), ('label', LABEL)], skip_header=True)
-    TEXT.build_vocab(train_data, vectors=GloVe('840B', 300))
+    vectors = Vectors(name='amazon_word_embeddings.txt', cache='~/')
+    TEXT.build_vocab(train_data, vectors=vectors)
+    # TEXT.build_vocab(train_data, vectors=GloVe('6B', 100))
+    # TEXT.build_vocab(train_data, vectors=GloVe('840B', 300))
     LABEL.build_vocab(train_data)
 
     word_embeddings = TEXT.vocab.vectors
@@ -44,7 +49,7 @@ def load_dataset(args, test_sen=None):
     print ("Vector size of Text Vocabulary: ", TEXT.vocab.vectors.size())
     print ("Label Length: " + str(len(LABEL.vocab)))
 
-    train_iter, valid_iter = data.BucketIterator.splits((train_data, valid_data), batch_size=32, sort_key=lambda x: len(x.text), repeat=False, shuffle=True)
+    train_iter, valid_iter = data.BucketIterator.splits((train_data, valid_data), batch_size=BATCH_SIZE, sort_key=lambda x: len(x.text), repeat=False, shuffle=True)
 
     '''Alternatively we can also use the default configurations'''
     # train_iter, test_iter = datasets.IMDB.iters(batch_size=32)
